@@ -1,0 +1,32 @@
+version: "3.8"
+networks:
+  codearena-p:
+    driver: bridge
+
+services:
+  cpp_docker:
+    build:
+      context: ./cpp_docker
+      dockerfile: Dockerfile
+    networks:
+      - codearena-p
+
+  python_docker:
+    build:
+      context: ./python_docker
+      dockerfile: Dockerfile
+    networks:
+      - codearena-p
+
+  frontend:
+    image: 
+    build:
+      context: ./frontend/  
+    networks:
+      - codearena-p
+    ports:
+      - "80:5173"  
+    volumes:
+      - ./frontend:/app
+    environment:
+      - NODE_ENV=development  
