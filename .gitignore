@@ -33,3 +33,4 @@ backend/tools/
 backup/
 backend/scripts/__pycache__/
 *.pyc
+frontend/vite.config.js.timestamp-*.mjs
