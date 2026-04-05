@@ -1,25 +1,27 @@
-version: "3.8"
 networks:
   codearena-p:
     driver: bridge
 
 services:
   cpp_docker:
+    image: codearena_cpp_docker
     build:
       context: ./cpp_docker
       dockerfile: Dockerfile
+    command: ["sh", "-c", "tail -f /dev/null"]
     networks:
       - codearena-p
 
   python_docker:
+    image: codearena_python_docker
     build:
       context: ./python_docker
       dockerfile: Dockerfile
+    command: ["sh", "-c", "tail -f /dev/null"]
     networks:
       - codearena-p
 
   frontend:
-    image: 
     build:
       context: ./frontend/  
     networks:

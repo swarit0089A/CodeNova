@@ -6,7 +6,7 @@ const docker = new Docker();
 const router = express.Router();
 const { auth } = require('../utils/authenticate');
 const { getLanguageConfig, getLanguageExtension, isDockerLanguage } = require('../utils/languages');
-const LOCAL_RUNNER_URL = process.env.LOCAL_RUNNER_URL || 'http://127.0.0.1:5052';
+const { LOCAL_RUNNER_URL, ensureLocalRunnerAvailable } = require('../utils/localRunner');
 
 router.post('/', auth, async (req, res) => {
   const submission = req.body;
@@ -177,6 +177,11 @@ function shouldUseLocalFallback(error) {
 
 async function executeViaLocalRunner(language, code, input, filePaths) {
   const { outputFilePath, errorFilePath } = filePaths;
+  const runnerReady = await ensureLocalRunnerAvailable();
+
+  if (!runnerReady) {
+    throw new Error('Local runner service is unavailable');
+  }
 
   const response = await fetch(`${LOCAL_RUNNER_URL}/execute`, {
     method: 'POST',

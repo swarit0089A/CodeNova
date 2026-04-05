@@ -6,7 +6,7 @@ const docker = new Docker();
 const router = express.Router();
 const { auth } = require('../utils/authenticate');
 const { getLanguageConfig, getLanguageExtension, isDockerLanguage } = require('../utils/languages');
-const LOCAL_RUNNER_URL = process.env.LOCAL_RUNNER_URL || 'http://127.0.0.1:5052';
+const { LOCAL_RUNNER_URL, ensureLocalRunnerAvailable } = require('../utils/localRunner');
 
 router.post('/', async (req, res) => {
   const { code, language, input } = req.body;
@@ -21,13 +21,18 @@ router.post('/', async (req, res) => {
       error.message.includes('connect') ||
       error.message.includes('pipe') ||
       error.message.includes('Docker');
+    const localRunnerUnavailable = error.message.includes('Local runner service is unavailable');
 
     res.status(500).json({
       result: 'SERVER ERROR',
-      log: dockerUnavailable
+      log: localRunnerUnavailable
+        ? 'Local code runner is unavailable. The backend could not start or reach the local execution service.'
+        : dockerUnavailable
         ? 'Docker is unavailable. Start Docker Desktop and make sure the runner containers/images are available.'
         : 'Internal Server Error',
-      error: dockerUnavailable
+      error: localRunnerUnavailable
+        ? 'The local code runner could not be started on this machine.'
+        : dockerUnavailable
         ? 'The code runner could not reach Docker on this machine.'
         : 'Unexpected execution failure.',
     });
@@ -109,6 +114,11 @@ function shouldUseLocalFallback(error) {
 
 async function executeViaLocalRunner(language, code, input, filePaths) {
   const { outputFilePath, errorFilePath } = filePaths;
+  const runnerReady = await ensureLocalRunnerAvailable();
+
+  if (!runnerReady) {
+    throw new Error('Local runner service is unavailable');
+  }
 
   const response = await fetch(`${LOCAL_RUNNER_URL}/execute`, {
     method: 'POST',

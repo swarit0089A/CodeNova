@@ -27,13 +27,33 @@ const getdatesRoute = require('./routes/getdates')
 const { MongoClient } = require('mongodb')
 const { createLocalDb } = require('./utils/localdb')
 const { seedPracticeProblems } = require('./utils/seedProblems')
+const { ensureDockerComposeServices, DOCKER_SERVICES } = require('./utils/dockerCompose')
+const { ensureLocalRunnerAvailable, LOCAL_RUNNER_URL } = require('./utils/localRunner')
 
-const MONGO_URI = process.env.MONGODB_URI
-const MONGO_DB_NAME = process.env.MONGODB_DB_NAME || 'CodeNova'
+const DEFAULT_LOCAL_MONGO_URI = 'mongodb://127.0.0.1:27018/codenovaDB'
+const MONGO_URI = process.env.MONGODB_URI || DEFAULT_LOCAL_MONGO_URI
+const MONGO_DB_NAME = resolveMongoDbName(MONGO_URI)
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const WINDOWS_POWERSHELL_PATH = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+const FRONTEND_DIST_PATH = path.join(__dirname, '..', 'frontend', 'dist')
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveMongoDbName(uri) {
+  if (process.env.MONGODB_DB_NAME) {
+    return process.env.MONGODB_DB_NAME;
+  }
+
+  if (!uri) {
+    return 'CodeNova';
+  }
+
+  const uriWithoutQuery = uri.split('?')[0];
+  const databaseName = uriWithoutQuery.slice(uriWithoutQuery.lastIndexOf('/') + 1).trim();
+
+  return databaseName || 'CodeNova';
 }
 
 function canAutostartLocalMongo(uri) {
@@ -121,6 +141,10 @@ async function connectMongoDB() {
 app.use(cors());
 app.use(express.json());
 
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.use('/access', accessRoute) 
 app.use('/submissions', submissionsRoute) 
 app.use('/runcode', coderunner)
@@ -141,13 +165,39 @@ app.use('/saveimage', saveimgRoute)
 app.use('/getimage', getimgRoute)
 app.use('/getdates', getdatesRoute)
 
+if (fs.existsSync(path.join(FRONTEND_DIST_PATH, 'index.html'))) {
+  app.use(express.static(FRONTEND_DIST_PATH));
+
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(FRONTEND_DIST_PATH, 'index.html'));
+  });
+}
+
 const PORT = port || 8000;
 
 async function startServer() {
+  const dockerStartResult = ensureDockerComposeServices();
+
+  if (dockerStartResult.success) {
+    console.log(`Docker runner services are ready: ${DOCKER_SERVICES.join(', ')}`);
+  } else if (!dockerStartResult.skipped) {
+    console.warn(`Docker auto-start failed (${dockerStartResult.commandTried}). Falling back to the local runner when needed.`);
+  }
+
+  if (IS_PRODUCTION && !process.env.MONGODB_URI) {
+    console.error('MONGODB_URI is required in production. Configure a persistent MongoDB database before deploying.');
+    process.exit(1);
+  }
+
   try {
     const db = await connectMongoDB();
     global.db = db;
   } catch (error) {
+    if (IS_PRODUCTION) {
+      console.error('MongoDB connection failed in production:', error.message);
+      process.exit(1);
+    }
+
     console.error('MongoDB unavailable, falling back to local JSON storage:', error.message);
     global.db = createLocalDb();
   }
@@ -157,6 +207,16 @@ async function startServer() {
     console.log(`Practice archive ready. Added ${seedResult.inserted} new seeded problems from a ${seedResult.totalCatalogSize}-problem catalog.`);
   } catch (error) {
     console.error('Unable to seed the practice archive:', error.message);
+  }
+
+  try {
+    const runnerReady = await ensureLocalRunnerAvailable();
+
+    if (!runnerReady) {
+      console.warn(`Local runner could not be started automatically at ${LOCAL_RUNNER_URL}.`);
+    }
+  } catch (error) {
+    console.warn(`Local runner startup check failed: ${error.message}`);
   }
 
   app.listen(PORT, '0.0.0.0', () => {

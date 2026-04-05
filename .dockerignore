@@ -1,0 +1,16 @@
+.git
+.gitignore
+.vscode
+.vite
+backup
+query
+
+**/node_modules
+**/dist
+**/.env
+**/.localdb
+**/.mongo-data
+**/temp
+**/ide_submissions
+**/submissions
+**/*.log

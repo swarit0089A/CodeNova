@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: codenova
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DOCKER_COMPOSE_AUTOSTART
+        value: "false"
+      - key: LOCAL_RUNNER_URL
+        value: http://127.0.0.1:5052
+      - key: SECRET_TOKEN
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
